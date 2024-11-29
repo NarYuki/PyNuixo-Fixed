@@ -18,18 +18,6 @@ def split_list(l, n):
         yield l[idx:idx + n]
 
 
-class MyPageURLs(Enum):
-    TOKEN_PATH = "/mypage/"
-    LOGIN_PATH = "/mypage/login"
-    REAUTH_TOKEN_PATH = "/mypage/reauth_login/index?url=/result/pc/list/index"
-    REAUTH_PATH = "/mypage/reauth_login/login"
-    SCORE_PATH = "/mypage/result/pc/list/index"
-    RESET_PASS_PATH = "/mypage/password_reminder/input"
-
-    def get_url(self, school) -> str:
-        return school.get_base_url() + self.value
-
-
 @dataclass
 class SubjectScore:
     subject: str
@@ -56,6 +44,18 @@ class School(Enum):
         return self.value
 
 
+class MyPageURLs(Enum):
+    TOKEN_PATH = "/mypage/"
+    LOGIN_PATH = "/mypage/login"
+    REAUTH_TOKEN_PATH = "/mypage/reauth_login/index?url=/result/pc/list/index"
+    REAUTH_PATH = "/mypage/reauth_login/login"
+    SCORE_PATH = "/mypage/result/pc/list/index"
+    RESET_PASS_PATH = "/mypage/password_reminder/input"
+
+    def get_url(self, school) -> str:
+        return school.get_base_url() + self.value
+
+
 class PyNuixo:
     def __init__(self, username, password):
         self.username = username.upper()
@@ -63,7 +63,7 @@ class PyNuixo:
 
         self.cookie_path = "cookies.pkl"
         self.header = {
-            'User-Agent': 'PyNuixo'
+            'User-Agent': 'PyNuixoFixed'
         }
         self.session = requests.Session()
 
@@ -125,39 +125,48 @@ class PyNuixo:
 
     def __score_parser(self, html):
         soup = BeautifulSoup(html, "html.parser")
-        subjects = [item.text for item in soup.find_all(
-            attrs={'rowspan': '3'})]
-        report_number = len(soup.find_all(
-            attrs={'class': 'header_report_number'}))
-        limit_dates = [item.text.strip() for item in soup.find_all(
-            attrs={'class': 'report_limit_date'})]
-        score_with_progresses = [item.text.strip() for item in soup.find_all(attrs={
-            'class': 'report_progress'})]
+        subjects = [item.text.strip().replace('\n', '') for item in soup.find_all(attrs={'rowspan': '4'})]
+        report_number = len(soup.find_all(attrs={'class': 'header_report_number'}))
+        limit_dates = [item.text.strip() for item in soup.find_all(attrs={'class': 'report_limit_date'})]
+
+        progress_rows = soup.find_all('tr', class_='subject_2st_row')
         persents = []
         scores = []
-        for index, item in enumerate(split_list(score_with_progresses, report_number)):
-            if index % 2 == 0:
-                persents += item
-            else:
-                scores += item
+        for row in progress_rows:
+            th_text = row.find('th').text.strip()
+            if th_text == '進捗率':
+                persents += [td.text.strip().replace('%', '') for td in row.find_all('td', class_='report_progress')]
+            elif th_text == '点数':
+                scores += [td.text.strip() for td in row.find_all('td', class_='report_progress')]
 
         subject_scores = []
+        limit_index = 0
+        for i, subject in enumerate(subjects):
+            for j in range(report_number):
+                if limit_index >= len(limit_dates):
+                    break
+                limit = limit_dates[limit_index]
+                limit_index += 1
+                if limit == "-":
+                    continue
 
-        subject_index = -1
-        for (index, (limit, score, persent)) in enumerate(zip(limit_dates, scores, persents)):
-            if index % report_number == 0:
-                subject_index += 1
-            if limit == "-":
-                continue
+                index = i * report_number + j
+                if index >= len(persents) or index >= len(scores):
+                    continue
+                persent = persents[index]
+                score = scores[index]
 
-            subject_scores.append(
-                SubjectScore(
-                    subject=subjects[subject_index],
-                    limit=limit,
-                    percentage=int(persent.strip().strip("%")),
-                    score=score
+                if not score or score == '-' or score == '採点待':
+                    continue
+
+                subject_scores.append(
+                    SubjectScore(
+                        subject=subject,
+                        limit=limit,
+                        percentage=int(persent) if persent.isdigit() else 0,
+                        score=score.strip()
+                    )
                 )
-            )
 
         return subject_scores
 
