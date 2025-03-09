@@ -125,49 +125,59 @@ class PyNuixo:
 
     def __score_parser(self, html):
         soup = BeautifulSoup(html, "html.parser")
-        subjects = [item.text.strip().replace('\n', '') for item in soup.find_all(attrs={'rowspan': '4'})]
-        report_number = len(soup.find_all(attrs={'class': 'header_report_number'}))
-        limit_dates = [item.text.strip() for item in soup.find_all(attrs={'class': 'report_limit_date'})]
-
-        progress_rows = soup.find_all('tr', class_='subject_2st_row')
-        persents = []
-        scores = []
-        for row in progress_rows:
-            th_text = row.find('th').text.strip()
-            if th_text == '進捗率':
-                persents += [td.text.strip().replace('%', '') for td in row.find_all('td', class_='report_progress')]
-            elif th_text == '点数':
-                scores += [td.text.strip() for td in row.find_all('td', class_='report_progress')]
-
+        
+        # 科目ごとのブロックを取得
+        subject_blocks = []
+        current_subject = None
+        
+        # 科目名を取得（rowspan='4'の要素）
+        subject_elements = soup.find_all(attrs={'class': 'align_left', 'rowspan': '4'})
+        
+        # 各科目ブロックを処理
         subject_scores = []
-        limit_index = 0
-        for i, subject in enumerate(subjects):
-            for j in range(report_number):
-                if limit_index >= len(limit_dates):
-                    break
-                limit = limit_dates[limit_index]
-                limit_index += 1
+        
+        for subject_elem in subject_elements:
+            subject_name = subject_elem.text.strip().replace('\n', '')
+            
+            # この科目の行を取得（親のtrから始まる4行）
+            subject_row = subject_elem.parent
+            
+            # 提出期日の行（1行目）
+            limit_dates_row = subject_row
+            limit_dates = [td.text.strip() for td in limit_dates_row.find_all('td', class_='report_limit_date')]
+            
+            # 進捗率の行（3行目）
+            progress_row = subject_row.find_next_sibling('tr').find_next_sibling('tr')
+            progress_values = [td.text.strip().replace('%', '') for td in progress_row.find_all('td', class_='report_progress')]
+            
+            # 点数の行（4行目）
+            score_row = progress_row.find_next_sibling('tr')
+            score_values = [td.text.strip() for td in score_row.find_all('td', class_='report_progress')]
+            
+            # 各レポートの情報を組み合わせる
+            for i in range(len(limit_dates)):
+                if i >= len(progress_values) or i >= len(score_values):
+                    continue
+                    
+                limit = limit_dates[i]
                 if limit == "-":
                     continue
-
-                index = i * report_number + j
-                if index >= len(persents) or index >= len(scores):
-                    continue
-                persent = persents[index]
-                score = scores[index]
-
+                    
+                progress = progress_values[i]
+                score = score_values[i]
+                
                 if not score or score == '-' or score == '採点待':
                     continue
-
+                
                 subject_scores.append(
                     SubjectScore(
-                        subject=subject,
+                        subject=subject_name,
                         limit=limit,
-                        percentage=int(persent) if persent.isdigit() else 0,
+                        percentage=int(progress) if progress.isdigit() else 0,
                         score=score.strip()
                     )
                 )
-
+        
         return subject_scores
 
     def __check_login_state(self, html) -> LoginState:
