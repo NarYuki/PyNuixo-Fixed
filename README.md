@@ -3,7 +3,7 @@
 # N高 S高成績確認 Python版 Nuixo
 
 > [!WARNING]
-> 2025年4月1日のN高マイページのN Lobby統合によるAPI仕様変更により、PyNuixoを用いての成績情報取得は出来なくなりました。
+> 2025年4月1日に実施されたN高マイページのN Lobby移行に伴うAPI仕様変更で、PyNuixoを用いての成績情報取得は出来なくなりました。
 
 > [!IMPORTANT]
 > NarYukiがGPL3.0ライセンスに基づき、改変しているものです。
